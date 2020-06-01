@@ -67,8 +67,11 @@ Details can be found at `https://pysathq.github.io <https://pysathq.github.io>`_
 
 # solvers to install
 #==============================================================================
-to_install = ['cadical', 'glucose30', 'glucose41', 'lingeling', 'maplechrono',
-        'maplecm', 'maplesat', 'minicard', 'minisat22', 'minisatgh']
+#to_install = ['cadical', 'glucose30', 'glucose41', 'lingeling', 'maplechrono',
+#        'maplecm', 'maplesat', 'minicard', 'minisat22', 'minisatgh']
+# maplechrono and maplecm links were broken at some point; commented for now
+to_install = ['cadical', 'glucose30', 'glucose41', 'lingeling', 'maplesat',
+              'minicard', 'minisat22', 'minisatgh']
 
 
 # example scripts to install as standalone executables
