@@ -4,8 +4,8 @@
 ## setup.py
 ##
 ##  Created on: Jan 23, 2018
-##      Author: Alexey S. Ignatiev
-##      E-mail: aignatiev@ciencias.ulisboa.pt
+##      Author: Alexey Ignatiev
+##      E-mail: alexey.ignatiev@monash.edu
 ##
 
 #
@@ -23,6 +23,7 @@ except ImportError:
     HAVE_SETUPTOOLS = False
 
 import distutils.command.build
+import distutils.command.build_ext
 import distutils.command.install
 
 import inspect, os, sys
@@ -95,6 +96,24 @@ class build(distutils.command.build.build):
         # now, do standard build
         distutils.command.build.build.run(self)
 
+# same with build_ext
+#==============================================================================
+class build_ext(distutils.command.build_ext.build_ext):
+    """
+        Our custom builder class.
+    """
+
+    def run(self):
+        """
+            Download, patch and compile SAT solvers before building.
+        """
+        # download and compile solvers
+        if platform.system() != 'Windows':
+            prepare.do(to_install)
+
+        # now, do standard build
+        distutils.command.build_ext.build_ext.run(self)
+
 
 # compilation flags for C extensions
 #==============================================================================
@@ -104,7 +123,7 @@ if platform.system() == 'Darwin':
     cpplib = ['c++']
 elif platform.system() == 'Windows':
     compile_flags = ['-DNBUILD', '-DNLGLYALSAT' , '/DINCREMENTAL', '-DNLGLOG',
-            '-DNDEBUG', '-DNCHKSOL', '-DNLGLFILES', '-DNLGLDEMA', '-I./zlib']
+            '-DNDEBUG', '-DNCHKSOL', '-DNLGLFILES', '-DNLGLDEMA', '-I./win']
     cpplib = []
 
 
@@ -158,11 +177,11 @@ setup(name='python-sat',
     long_description_content_type='text/x-rst; charset=UTF-8',
     license='MIT',
     author='Alexey Ignatiev, Joao Marques-Silva, Antonio Morgado',
-    author_email='aignatiev@ciencias.ulisboa.pt, jpms@ciencias.ulisboa.pt, ajmorgado@ciencias.ulisboa.pt',
+    author_email='alexey.ignatiev@monash.edu, joao.marques-silva@univ-toulouse.fr, ajrmorgado@gmail.com',
     url='https://github.com/pysathq/pysat',
     ext_modules=[pycard_ext, pysolvers_ext],
     scripts=['examples/{0}.py'.format(s) for s in scripts],
-    cmdclass={'build': build},
+    cmdclass={'build': build, 'build_ext': build_ext},
     install_requires=['six'],
     extras_require = {
         'aiger': ['py-aiger-cnf>=2.0.0'],

@@ -377,6 +377,15 @@ class Solver(object):
             self.solver.delete()
             self.solver = None
 
+    def accum_stats(self):
+        """
+            Get accumulated low-level stats from the solver. This varies
+            between solvers.
+        """
+
+        if self.solver:
+            return self.solver.accum_stats()
+
     def solve(self, assumptions=[]):
         """
             This method is used to check satisfiability of a CNF formula given
@@ -409,7 +418,7 @@ class Solver(object):
         if self.solver:
             return self.solver.solve(assumptions)
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             This method is used to check satisfiability of a CNF formula given
             to the solver (see methods :meth:`add_clause` and
@@ -434,8 +443,20 @@ class Solver(object):
             literals. (**Note** that the ``assumptions`` argument is optional
             and disabled by default.)
 
+            **Note** that since SIGINT handling and :meth:`interrupt` are not
+            configured to work *together* at this point, additional input
+            parameter ``expect_interrupt`` is assumed to be given, indicating
+            what kind of interruption may happen during the execution of
+            :meth:`solve_limited`: whether a SIGINT signal or internal
+            :meth:`interrupt`. By default, a SIGINT signal handling is
+            assumed. If ``expect_interrupt`` is set to ``True`` and eventually
+            a SIGINT is received, the behavior is **undefined**.
+
             :param assumptions: a list of assumption literals.
+            :param expect_interrupt: whether :meth:`interrupt` will be called
+
             :type assumptions: iterable(int)
+            :type expect_interrupt: bool
 
             :rtype: Boolean or ``None``.
 
@@ -470,7 +491,7 @@ class Solver(object):
         """
 
         if self.solver:
-            return self.solver.solve_limited(assumptions)
+            return self.solver.solve_limited(assumptions, expect_interrupt)
 
     def conf_budget(self, budget=-1):
         """
@@ -539,6 +560,9 @@ class Solver(object):
             timer objects. The interrupt must be cleared before performing
             another SAT call (see :meth:`clear_interrupt`).
 
+            **Note** that this method can be called if limited SAT calls are
+            made with the option ``expect_interrupt`` set to ``True``.
+
             Behaviour is **undefined** if used to interrupt a *non-limited*
             SAT call (see :meth:`solve`).
 
@@ -559,7 +583,7 @@ class Solver(object):
                 >>> timer = Timer(10, interrupt, [m])
                 >>> timer.start()
                 >>>
-                >>> print(m.solve_limited())
+                >>> print(m.solve_limited(expect_interrupt=True))
                 None
                 >>> m.delete()
         """
@@ -1071,18 +1095,10 @@ class Cadical(object):
 
         if self.cadical:
             if self.use_timer:
-                 start_time = process_time()
+                start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.cadical_solve(self.cadical, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.cadical_solve(self.cadical, assumptions, 0)
+            self.status = pysolvers.cadical_solve(self.cadical, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1091,7 +1107,7 @@ class Cadical(object):
             self.prev_assumps = assumptions
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -1345,16 +1361,8 @@ class Glucose3(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.glucose3_solve(self.glucose, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.glucose3_solve(self.glucose, assumptions, 0)
+            self.status = pysolvers.glucose3_solve(self.glucose, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1362,7 +1370,7 @@ class Glucose3(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -1372,16 +1380,8 @@ class Glucose3(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.glucose3_solve_lim(self.glucose, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.glucose3_solve_lim(self.glucose, assumptions, 0)
+            self.status = pysolvers.glucose3_solve_lim(self.glucose,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1430,16 +1430,8 @@ class Glucose3(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.glucose3_propagate(self.glucose, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.glucose3_propagate(self.glucose, assumptions, phase_saving, 0)
+            st, props = pysolvers.glucose3_propagate(self.glucose,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1650,6 +1642,15 @@ class Glucose4(object):
             if self.prfile:
                 self.prfile.close()
 
+    def accum_stats(self):
+        """
+            Get accumulated low-level stats from the solver. This varies
+            between solvers.
+        """
+
+        if self.glucose:
+            return pysolvers.glucose41_acc_stats(self.glucose)
+
     def solve(self, assumptions=[]):
         """
             Solve internal formula.
@@ -1659,16 +1660,8 @@ class Glucose4(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.glucose41_solve(self.glucose, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.glucose41_solve(self.glucose, assumptions, 0)
+            self.status = pysolvers.glucose41_solve(self.glucose, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1676,7 +1669,7 @@ class Glucose4(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -1686,16 +1679,8 @@ class Glucose4(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.glucose41_solve_lim(self.glucose, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.glucose41_solve_lim(self.glucose, assumptions, 0)
+            self.status = pysolvers.glucose41_solve_lim(self.glucose,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1744,16 +1729,8 @@ class Glucose4(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.glucose41_propagate(self.glucose, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.glucose41_propagate(self.glucose, assumptions, phase_saving, 0)
+            st, props = pysolvers.glucose41_propagate(self.glucose,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1970,16 +1947,8 @@ class Lingeling(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.lingeling_solve(self.lingeling, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.lingeling_solve(self.lingeling, assumptions, 0)
+            self.status = pysolvers.lingeling_solve(self.lingeling,
+                    assumptions, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -1988,7 +1957,7 @@ class Lingeling(object):
             self.prev_assumps = assumptions
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -2226,16 +2195,8 @@ class MapleChrono(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.maplechrono_solve(self.maplesat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.maplechrono_solve(self.maplesat, assumptions, 0)
+            self.status = pysolvers.maplechrono_solve(self.maplesat,
+                    assumptions, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2243,7 +2204,7 @@ class MapleChrono(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -2253,16 +2214,8 @@ class MapleChrono(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.maplechrono_solve_lim(self.maplesat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.maplechrono_solve_lim(self.maplesat, assumptions, 0)
+            self.status = pysolvers.maplechrono_solve_lim(self.maplesat,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2311,16 +2264,8 @@ class MapleChrono(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.maplechrono_propagate(self.maplesat, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.maplechrono_propagate(self.maplesat, assumptions, phase_saving, 0)
+            st, props = pysolvers.maplechrono_propagate(self.maplesat,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2537,16 +2482,8 @@ class MapleCM(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.maplecm_solve(self.maplesat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.maplecm_solve(self.maplesat, assumptions, 0)
+            self.status = pysolvers.maplecm_solve(self.maplesat, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2554,7 +2491,7 @@ class MapleCM(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -2564,16 +2501,8 @@ class MapleCM(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.maplecm_solve_lim(self.maplesat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.maplecm_solve_lim(self.maplesat, assumptions, 0)
+            self.status = pysolvers.maplecm_solve_lim(self.maplesat,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2622,16 +2551,8 @@ class MapleCM(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.maplecm_propagate(self.maplesat, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.maplecm_propagate(self.maplesat, assumptions, phase_saving, 0)
+            st, props = pysolvers.maplecm_propagate(self.maplesat,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2848,16 +2769,8 @@ class Maplesat(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.maplesat_solve(self.maplesat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.maplesat_solve(self.maplesat, assumptions, 0)
+            self.status = pysolvers.maplesat_solve(self.maplesat, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2865,7 +2778,7 @@ class Maplesat(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -2875,16 +2788,8 @@ class Maplesat(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.maplesat_solve_lim(self.maplesat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.maplesat_solve_lim(self.maplesat, assumptions, 0)
+            self.status = pysolvers.maplesat_solve_lim(self.maplesat,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -2933,16 +2838,8 @@ class Maplesat(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.maplesat_propagate(self.maplesat, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.maplesat_propagate(self.maplesat, assumptions, phase_saving, 0)
+            st, props = pysolvers.maplesat_propagate(self.maplesat,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3151,16 +3048,8 @@ class Minicard(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.minicard_solve(self.minicard, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.minicard_solve(self.minicard, assumptions, 0)
+            self.status = pysolvers.minicard_solve(self.minicard, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3168,7 +3057,7 @@ class Minicard(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -3178,16 +3067,8 @@ class Minicard(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.minicard_solve_lim(self.minicard, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.minicard_solve_lim(self.minicard, assumptions, 0)
+            self.status = pysolvers.minicard_solve_lim(self.minicard,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3236,16 +3117,8 @@ class Minicard(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.minicard_propagate(self.minicard, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.minicard_propagate(self.minicard, assumptions, phase_saving, 0)
+            st, props = pysolvers.minicard_propagate(self.minicard,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3460,16 +3333,8 @@ class Minisat22(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.minisat22_solve(self.minisat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.minisat22_solve(self.minisat, assumptions, 0)
+            self.status = pysolvers.minisat22_solve(self.minisat, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3477,7 +3342,7 @@ class Minisat22(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -3487,16 +3352,8 @@ class Minisat22(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.minisat22_solve_lim(self.minisat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.minisat22_solve_lim(self.minisat, assumptions, 0)
+            self.status = pysolvers.minisat22_solve_lim(self.minisat,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3545,16 +3402,8 @@ class Minisat22(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.minisat22_propagate(self.minisat, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.minisat22_propagate(self.minisat, assumptions, phase_saving, 0)
+            st, props = pysolvers.minisat22_propagate(self.minisat,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3757,16 +3606,8 @@ class MinisatGH(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.minisatgh_solve(self.minisat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.minisatgh_solve(self.minisat, assumptions, 0)
+            self.status = pysolvers.minisatgh_solve(self.minisat, assumptions,
+                    int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3774,7 +3615,7 @@ class MinisatGH(object):
 
             return self.status
 
-    def solve_limited(self, assumptions=[]):
+    def solve_limited(self, assumptions=[], expect_interrupt=False):
         """
             Solve internal formula using given budgets for conflicts and
             propagations.
@@ -3784,16 +3625,8 @@ class MinisatGH(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                self.status = pysolvers.minisatgh_solve_lim(self.minisat, assumptions, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                self.status = pysolvers.minisatgh_solve_lim(self.minisat, assumptions, 0)
+            self.status = pysolvers.minisatgh_solve_lim(self.minisat,
+                    assumptions, int(MainThread.check()), int(expect_interrupt))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
@@ -3842,16 +3675,8 @@ class MinisatGH(object):
             if self.use_timer:
                  start_time = process_time()
 
-            if MainThread.check() == True:
-                # saving default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-                st, props = pysolvers.minisatgh_propagate(self.minisat, assumptions, phase_saving, 1)
-
-                # recovering default SIGINT handler
-                def_sigint_handler = signal.signal(signal.SIGINT, def_sigint_handler)
-            else:
-                st, props = pysolvers.minisatgh_propagate(self.minisat, assumptions, phase_saving, 0)
+            st, props = pysolvers.minisatgh_propagate(self.minisat,
+                    assumptions, phase_saving, int(MainThread.check()))
 
             if self.use_timer:
                 self.call_time = process_time() - start_time
