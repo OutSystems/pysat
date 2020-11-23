@@ -244,6 +244,9 @@ class CardEnc(object):
         if vpool:
             top_id = vpool.top
 
+        # making sure we are dealing with a list of literals
+        lits = list(lits)
+
         # choosing the maximum id among the current top and the list of literals
         top_id = max(map(lambda x: abs(x), lits + [top_id if top_id != None else 0]))
 
@@ -258,13 +261,14 @@ class CardEnc(object):
         if res:
             ret.clauses, ret.nv = res
 
-        # updating vpool if necessary
-        if vpool:
-            if vpool._occupied and vpool.top <= vpool._occupied[0][0] <= ret.nv:
-                cls._update_vids(ret, vpool)
-            else:
-                vpool.top = ret.nv - 1
-                vpool._next()
+            # updating vpool if necessary
+            if vpool:
+                if vpool._occupied and vpool.top <= vpool._occupied[0][0] <= ret.nv:
+                    cls._update_vids(ret, vpool)
+                else:
+                    # here, ret.nv id is assumed to be larger than the top id
+                    vpool.top = ret.nv - 1
+                    vpool._next()
 
         return ret
 
@@ -332,6 +336,9 @@ class CardEnc(object):
         if vpool:
             top_id = vpool.top
 
+        # making sure we are dealing with a list of literals
+        lits = list(lits)
+
         # choosing the maximum id among the current top and the list of literals
         top_id = max(map(lambda x: abs(x), lits + [top_id if top_id != None else 0]))
 
@@ -346,13 +353,14 @@ class CardEnc(object):
         if res:
             ret.clauses, ret.nv = res
 
-        # updating vpool if necessary
-        if vpool:
-            if vpool._occupied and vpool.top <= vpool._occupied[0][0] <= ret.nv:
-                cls._update_vids(ret, vpool)
-            else:
-                vpool.top = ret.nv - 1
-                vpool._next()
+            # updating vpool if necessary
+            if vpool:
+                if vpool._occupied and vpool.top <= vpool._occupied[0][0] <= ret.nv:
+                    cls._update_vids(ret, vpool)
+                else:
+                    # here, ret.nv id is assumed to be larger than the top id
+                    vpool.top = ret.nv - 1
+                    vpool._next()
 
         return ret
 

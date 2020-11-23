@@ -206,7 +206,7 @@ class RC2(object):
         self.trim = trim
 
         # clause selectors and mapping from selectors to clause ids
-        self.sels, self.smap, self.sall, self.s2cl = [], {}, [], {}
+        self.sels, self.smap, self.sall, self.s2cl, self.sneg = [], {}, [], {}, set([])
 
         # other MaxSAT related stuff
         self.topv = formula.nv
@@ -529,11 +529,14 @@ class RC2(object):
                         if selv in m:
                             # clause is satisfied
                             cl.append(-selv)
-                        elif selv in self.s2cl:
-                            # clause is falsified and it is not unit size
-                            for il in self.s2cl[selv]:
-                                el = self.vmap.i2e[abs(il)]
-                                model[el - 1] = int(copysign(el, -il))
+
+                            # next time we want to falsify one of these
+                            # clauses, i.e. we should encode the negation
+                            # of each of these selectors
+                            if selv in self.s2cl and not selv in self.sneg:
+                                self.sneg.add(selv)
+                                for il in self.s2cl[selv]:
+                                    self.oracle.add_clause([selv, -il])
 
                     self.oracle.add_clause(cl)
                 elif block == -1:
@@ -1316,6 +1319,7 @@ class RC2Stratified(RC2, object):
             # with the first model being already computed
             # i.e. all levels are finished and so all clauses are present
             # thus, we need to simply call RC2 for the next model
+            self.done = -1  # we are done with stratification, disabling it
             if self.compute_() == False:
                 return
 
@@ -1481,7 +1485,8 @@ class RC2Stratified(RC2, object):
                 self.wght[l] -= self.minw
 
                 # deactivate this assumption and put at a lower level
-                if self.wght[l] < self.blop[self.levl]:
+                # if self.done != -1, i.e. if stratification is disabled
+                if self.done != -1 and self.wght[l] < self.blop[self.levl]:
                     self.wstr[self.wght[l]].append(l)
                     to_deactivate.add(l)
 
@@ -1517,7 +1522,8 @@ class RC2Stratified(RC2, object):
                 self.wght[l] -= self.minw
 
                 # deactivate this assumption and put at a lower level
-                if self.wght[l] < self.blop[self.levl]:
+                # if self.done != -1, i.e. if stratification is disabled
+                if self.done != -1 and self.wght[l] < self.blop[self.levl]:
                     self.wstr[self.wght[l]].append(l)
                     to_deactivate.add(l)
 
@@ -1706,10 +1712,10 @@ if __name__ == '__main__':
 
                 if i == to_enum:
                     break
-
-            # needed for MSE'20
-            if to_enum != 1 and block == 1:
-                print('v')
+            else:
+                # needed for MSE'20
+                if verbose > 2 and vnew and to_enum != 1 and block == 1:
+                    print('v')
 
             if verbose:
                 if not optimum_found:

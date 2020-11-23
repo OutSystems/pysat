@@ -11,6 +11,47 @@ to date and then is good idea.
 Changelog and more
 ------------------
 
+27.09.2020 (*0.1.6.dev9*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fixed a bug in copying of :class:`CNFPlus` and :class:`WCNFPlus` objects.
+- Added an attempt to write down OPB and LP formats (likely to be buggy!).
+
+26.09.2020 (*0.1.6.dev8*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fixed a bug in `solvers.py` related to the :class:`CNFPlus` iterator.
+
+25.09.2020 (*0.1.6.dev7*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Added an example for accum_stats().
+- Fixed a minor bug in musx example.
+- A few fixes in :mod:`pysat.formula`.
+- Fixed an issue in :mod:`pysat.card` related to non-list literals.
+
+09.08.2020 (*0.1.6.dev6*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Using int64_t for accum_stats().
+
+03.08.2020 (*0.1.6.dev5*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fixed the bug of wrong top_id when no cardinality encoding is created.
+
+26.07.2020 (*0.1.6.dev4*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Accumulated stats for other solvers.
+- More enumeration-related fixes in RC2Stratified.
+
+07.07.2020 (*0.1.6.dev3*)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fixed RC2's enumeration of MSSes.
+- Minor changes to the patch for CaDiCaL
+
 06.07.2020 (*0.1.6.dev2*)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
