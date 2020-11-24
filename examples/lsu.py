@@ -87,7 +87,8 @@
 from __future__ import print_function
 import getopt
 from pysat.card import ITotalizer
-from pysat.formula import CNF, WCNF, WCNFPlus
+from pysat.pb import EncType, PBEnc
+from pysat.formula import CNF, WCNF, WCNFPlus, IDPool
 from pysat.solvers import Solver
 from threading import Timer
 import os
@@ -118,6 +119,7 @@ class LSU:
 
         :param formula: input MaxSAT formula
         :param solver: name of SAT solver
+        :param pb_enc_type: PB encoding type to use for solving weighted problems
         :param expect_interrupt: whether or not an :meth:`interrupt` call is expected
         :param verbose: verbosity level
 
@@ -127,19 +129,21 @@ class LSU:
         :type verbose: int
     """
 
-    def __init__(self, formula, solver='g4', expect_interrupt=False, verbose=0):
+    def __init__(self, formula, solver='g4', pb_enc_type=EncType.best, expect_interrupt=False, verbose=0):
         """
             Constructor.
         """
 
         self.verbose = verbose
         self.solver = solver
+        self.pb_enc_type = pb_enc_type
         self.expect_interrupt = expect_interrupt
         self.formula = formula
-        self.topv = formula.nv  # largest variable index
-        self.sels = []          # soft clause selector variables
-        self.tot = None         # totalizer encoder for the cardinality constraint
-        self._init(formula)     # initiaize SAT oracle
+        self.vpool = IDPool(occupied=[(1, formula.nv)])     # variable pool used for managing card/PB encodings
+        self.sels = []                                      # soft clause selector variables
+        self.is_weighted = False                            # auxiliary flag indicating if it's a weighted problem
+        self.tot = None                                     # totalizer encoder for the cardinality constraint
+        self._init(formula)                                 # initialize SAT oracle
 
     def _init(self, formula):
         """
@@ -159,11 +163,11 @@ class LSU:
         for i, cl in enumerate(formula.soft):
             # TODO: if clause is unit, use its literal as selector
             # (ITotalizer must be extended to support PB constraints first)
-            self.topv += 1
-            selv = self.topv
-            cl.append(self.topv)
+            selv = self.vpool._next()
+            cl.append(selv)
             self.oracle.add_clause(cl)
             self.sels.append(selv)
+        self.is_weighted = any(w > 1 for w in formula.wght)
 
         if self.verbose > 1:
             print('c formula: {0} vars, {1} hard, {2} soft'.format(formula.nv, len(formula.hard), len(formula.soft)))
@@ -281,21 +285,23 @@ class LSU:
         model_set = set(model)
         cost = 0
 
-        for i, cl in enumerate(formula.soft):
-            cost += formula.wght[i] if all(l not in model_set for l in filter(lambda l: abs(l) <= self.formula.nv, cl)) else 0
+        for cl, w in zip(formula.soft, formula.wght):
+            cost += w if all(l not in model_set for l in filter(lambda l: abs(l) <= self.formula.nv, cl)) else 0
 
         return cost
 
     def _assert_lt(self, cost):
         """
             The method enforces an upper bound on the cost of the MaxSAT
-            solution. This is done by encoding the sum of all soft clause
-            selectors with the use the iterative totalizer encoding, i.e.
-            :class:`.ITotalizer`. Note that the sum is created once, at the
-            beginning. Each of the following calls to this method only enforces
-            the upper bound on the created sum by adding the corresponding unit
-            size clause. Each such clause is added on the fly with no restart
-            of the underlying SAT oracle.
+            solution. For unweighted problems, this is done by encoding the sum
+            of all soft clause selectors with the use the iterative totalizer
+            encoding, i.e. :class:`.ITotalizer`. Note that the sum is created
+            once, at the beginning. Each of the following calls to this method
+            only enforces the upper bound on the created sum by adding the
+            corresponding unit size clause. For weighted problems, the PB
+            encoding given through the :meth:`__init__` method is used.
+            Each such clause is added on the fly with no restart of the
+            underlying SAT oracle.
 
             :param cost: the cost of the next MaxSAT solution is enforced to be
                 *lower* than this current cost
@@ -303,14 +309,19 @@ class LSU:
             :type cost: int
         """
 
-        if self.tot == None:
-            self.tot = ITotalizer(lits=self.sels, ubound=cost-1, top_id=self.topv)
-            self.topv = self.tot.top_id
+        if self.is_weighted:
+            # TODO: use incremental PB encoding
+            self.oracle.append_formula(PBEnc.leq(self.sels, weights=self.formula.wght, bound=cost-1, vpool=self.vpool))
+        else:
 
-            for cl in self.tot.cnf.clauses:
-                self.oracle.add_clause(cl)
+            if self.tot is None:
+                self.tot = ITotalizer(lits=self.sels, ubound=cost-1, top_id=self.vpool.top)
+                self.vpool.top = self.tot.top_id
 
-        self.oracle.add_clause([-self.tot.rhs[cost-1]])
+                for cl in self.tot.cnf.clauses:
+                    self.oracle.add_clause(cl)
+
+            self.oracle.add_clause([-self.tot.rhs[cost-1]])
 
     def interrupt(self):
         """
@@ -345,6 +356,7 @@ class LSUPlus(LSU, object):
         :class:`.Minicard`).
 
         :param formula: input MaxSAT formula in WCNF+ format
+        :param pb_enc_type: PB encoding type to use for solving weighted problems
         :param expect_interrupt: whether or not an :meth:`interrupt` call is expected
         :param verbose: verbosity level
 
@@ -353,12 +365,12 @@ class LSUPlus(LSU, object):
         :type verbose: int
     """
 
-    def __init__(self, formula, expect_interrupt=False, verbose=0):
+    def __init__(self, formula, pb_enc_type=EncType.best, expect_interrupt=False, verbose=0):
         """
             Constructor.
         """
 
-        super(LSUPlus, self).__init__(formula, solver='mc',
+        super(LSUPlus, self).__init__(formula, solver='mc', pb_enc_type=pb_enc_type,
                 expect_interrupt=expect_interrupt, verbose=verbose)
 
         # adding atmost constraints
@@ -376,7 +388,10 @@ class LSUPlus(LSU, object):
             :type cost: int
         """
 
-        self.oracle.add_atmost(self.sels, cost-1)
+        if self.is_weighted:
+            super()._assert_lt(cost)
+        else:
+            self.oracle.add_atmost(self.sels, cost-1)
 
 
 #
@@ -387,13 +402,14 @@ def parse_options():
     """
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hms:t:v', ['help', 'model', 'solver=', 'timeout=', 'verbose'])
+        opts, args = getopt.getopt(sys.argv[1:], 'hms:e:t:v', ['help', 'model', 'solver=', 'pb-enc=', 'timeout=', 'verbose'])
     except getopt.GetoptError as err:
         sys.stderr.write(str(err).capitalize())
         print_usage()
         sys.exit(1)
 
     solver = 'g4'
+    pb_enc = EncType.best
     verbose = 1
     print_model = False
     timeout = None
@@ -406,6 +422,8 @@ def parse_options():
             print_model = True
         elif opt in ('-s', '--solver'):
             solver = str(arg)
+        elif opt in ('-e', '--pb-enc'):
+            pb_enc = int(arg)
         elif opt in ('-t', '--timeout'):
             if str(arg) != 'none':
                 timeout = float(arg)
@@ -414,7 +432,7 @@ def parse_options():
         else:
             assert False, 'Unhandled option: {0} {1}'.format(opt, arg)
 
-    return print_model, solver, timeout, verbose, args
+    return print_model, solver, pb_enc, timeout, verbose, args
 
 
 #
@@ -430,6 +448,8 @@ def print_usage():
     print('        -m, --model              Print model')
     print('        -s, --solver=<string>    SAT solver to use')
     print('                                 Available values: g3, g4, mc, m22, mgh (default = g4)')
+    print('        -e, --pb-enc=<int>       PB encoding to use for weighted MaxSAT solving')
+    print('                                 Available values: 0=best, 1=bdd, 2=seqcounter, 3=sortnetwork, 4=adder, 5=binmerge (default = 0)')
     print('        -t, --timeout=<float>    Set time limit for MaxSAT solver')
     print('                                 Available values: [0 .. FLOAT_MAX], none (default: none)')
     print('        -v, --verbose            Be verbose')
@@ -438,7 +458,7 @@ def print_usage():
 #
 #==============================================================================
 if __name__ == '__main__':
-    print_model, solver, timeout, verbose, files = parse_options()
+    print_model, solver, pb_enc, timeout, verbose, files = parse_options()
 
     if files:
         # reading standard CNF or WCNF
@@ -448,14 +468,14 @@ if __name__ == '__main__':
             else:  # expecting '*.cnf'
                 formula = CNF(from_file=files[0]).weighted()
 
-            lsu = LSU(formula, solver=solver,
+            lsu = LSU(formula, solver=solver, pb_enc_type=pb_enc,
                     expect_interrupt=(timeout != None), verbose=verbose)
 
         # reading WCNF+
         elif re.search('\.wcnf[p,+](\.(gz|bz2|lzma|xz))?$', files[0]):
             formula = WCNFPlus(from_file=files[0])
-            lsu = LSUPlus(formula, expect_interrupt=(timeout != None),
-                    verbose=verbose)
+            lsu = LSUPlus(formula, pb_enc_type=pb_enc,
+                    expect_interrupt=(timeout != None), verbose=verbose)
 
         # setting a timer if necessary
         if timeout is not None:
